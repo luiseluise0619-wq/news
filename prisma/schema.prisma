@@ -1,0 +1,102 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique // e.g. "대한민국", "세계", "AI"
+  description String?
+  sources     Source[]
+  events      NewsEvent[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Source {
+  id          String    @id @default(cuid())
+  name        String    // e.g. "BBC News"
+  url         String    // RSS feed URL or API endpoint
+  type        String    // "rss", "api"
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id])
+  articles    Article[]
+  isActive    Boolean   @default(true)
+  lastFetched DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Article {
+  id          String    @id @default(cuid())
+  title       String
+  url         String    @unique
+  content     String?   // raw content or summary from feed
+  publishedAt DateTime
+  sourceId    String
+  source      Source    @relation(fields: [sourceId], references: [id])
+  newsEventId String?
+  newsEvent   NewsEvent? @relation(fields: [newsEventId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model NewsEvent {
+  id              String   @id @default(cuid())
+  title           String   // AI generated title
+  summaryWhat     String   // 무슨 일이 있었나
+  summaryWhy      String   // 왜 중요한가
+  summaryFuture   String   // 앞으로 주목할 점
+  importanceScore Int      // 1-10
+  articles        Article[]
+  categoryId      String?
+  category        Category? @relation(fields: [categoryId], references: [id])
+  dailyReportId   String?
+  dailyReport     DailyReport? @relation(fields: [dailyReportId], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Paper {
+  id              String   @id @default(cuid())
+  title           String
+  field           String
+  institution     String?
+  authors         String
+  publishedAt     DateTime
+  coreFinding     String
+  importance      String
+  limitations     String?
+  url             String   @unique
+  importanceScore Int      // 1-10
+  dailyReportId   String?
+  dailyReport     DailyReport? @relation(fields: [dailyReportId], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model DailyReport {
+  id          String   @id @default(cuid())
+  date        DateTime @unique // The date of the report
+  topChanges  String   // "TODAY IN 30 SECONDS" JSON or string
+  whatMatters String   // "WHAT MATTERS" JSON or string
+  newsEvents  NewsEvent[]
+  papers      Paper[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Bookmark {
+  id          String   @id @default(cuid())
+  userId      String   // for future multi-user support, or just a dummy
+  itemId      String   // NewsEvent id or Paper id
+  itemType    String   // "event", "paper"
+  createdAt   DateTime @default(now())
+}
