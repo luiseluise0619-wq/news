@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search - Daily Research Brief</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans">
+
+    <nav class="bg-white shadow-sm mb-8 border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="/" class="text-xl font-bold text-indigo-600">Daily Research Brief</a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/" class="text-gray-600 hover:text-gray-900">Today</a>
+                    <a href="/archive" class="text-gray-600 hover:text-gray-900">Archive</a>
+                    <a href="/search" class="text-indigo-600 font-semibold">Search</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+        <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Search Papers</h1>
+
+        <form action="/search" method="get" class="mb-8">
+            <div class="flex shadow-sm rounded-md">
+                <input type="text" name="q" value="{{ query if query else '' }}" placeholder="Search by title, author, or category..." class="flex-1 block w-full rounded-none rounded-l-md sm:text-sm border-gray-300 px-4 py-3 border focus:ring-indigo-500 focus:border-indigo-500">
+                <button type="submit" class="inline-flex items-center px-6 py-3 border border-transparent text-sm font-medium rounded-r-md text-white bg-indigo-600 hover:bg-indigo-700">
+                    Search
+                </button>
+            </div>
+        </form>
+
+        {% if query %}
+            <h2 class="text-lg font-medium text-gray-700 mb-4">Results for "{{ query }}" ({{ papers|length }})</h2>
+
+            <div class="bg-white shadow overflow-hidden sm:rounded-md border border-gray-200">
+                <ul class="divide-y divide-gray-200">
+                    {% for paper in papers %}
+                        <li>
+                            <a href="/paper/{{ paper.id }}" class="block hover:bg-gray-50 transition duration-150">
+                                <div class="px-4 py-4 sm:px-6">
+                                    <div class="flex items-center justify-between">
+                                        <p class="text-sm font-bold text-indigo-600 truncate">
+                                            {{ paper.title }}
+                                        </p>
+                                        <div class="ml-2 flex-shrink-0 flex">
+                                            <p class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                                {{ paper.category }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="mt-2 text-sm text-gray-500">
+                                        {{ paper.authors }}
+                                    </div>
+                                </div>
+                            </a>
+                        </li>
+                    {% else %}
+                        <li class="px-4 py-8 text-center text-gray-500">
+                            No papers found matching your query.
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+    </main>
+</body>
+</html>

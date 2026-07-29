@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Archive - Daily Research Brief</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans">
+
+    <nav class="bg-white shadow-sm mb-8 border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="/" class="text-xl font-bold text-indigo-600">Daily Research Brief</a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/" class="text-gray-600 hover:text-gray-900">Today</a>
+                    <a href="/archive" class="text-indigo-600 font-semibold">Archive</a>
+                    <a href="/search" class="text-gray-600 hover:text-gray-900">Search</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+        <h1 class="text-3xl font-extrabold text-gray-900 mb-8">Briefing Archive</h1>
+
+        <div class="bg-white shadow overflow-hidden sm:rounded-md">
+            <ul class="divide-y divide-gray-200">
+                {% for brief in briefs %}
+                    <li>
+                        <a href="/?date={{ brief.date }}" class="block hover:bg-gray-50 transition">
+                            <div class="px-4 py-4 sm:px-6">
+                                <div class="flex items-center justify-between">
+                                    <p class="text-lg font-bold text-indigo-600 truncate">
+                                        {{ brief.date }}
+                                    </p>
+                                </div>
+                                <div class="mt-2 sm:flex sm:justify-between">
+                                    <div class="sm:flex">
+                                        <p class="flex items-center text-sm text-gray-700">
+                                            {{ brief.takeaway }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </a>
+                    </li>
+                {% else %}
+                    <li class="px-4 py-8 text-center text-gray-500">
+                        No past briefs found.
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </main>
+</body>
+</html>

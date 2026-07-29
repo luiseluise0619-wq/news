@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+sqlalchemy
+apscheduler
+requests
+openai
+beautifulsoup4
+jinja2
+pydantic
+feedparser
+python-dotenv
