@@ -34,32 +34,17 @@ export default function Home() {
   const handleGenerateReport = async () => {
     setGenerating(true);
     setError(null);
-
-    let data: any;
     try {
       const res = await fetch('/api/cron/daily');
-      data = await res.json();
+      const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || '리포트 생성 중 오류가 발생했습니다.');
       }
-      // Pass 0 already produced a complete (possibly partial) report.
       await fetchReport();
     } catch (err: any) {
       setError(err.message);
+    } finally {
       setGenerating(false);
-      return;
-    }
-
-    // Report is on screen — stop the spinner. Any remaining events fill in
-    // quietly via background refreshes.
-    setGenerating(false);
-
-    if (data?.data?.continued) {
-      const startedAt = Date.now();
-      while (Date.now() - startedAt < 120_000) {
-        await new Promise((r) => setTimeout(r, 8_000));
-        await fetchReport();
-      }
     }
   };
 
@@ -255,7 +240,7 @@ export default function Home() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    데이터 수집 및 AI 분석 중... (수 분 소요)
+                    데이터 수집 및 AI 분석 중...
                   </span>
                 ) : (
                   '데이터 수집 및 리포트 생성 시작'
