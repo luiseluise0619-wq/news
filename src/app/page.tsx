@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { PrismaClient } from '@prisma/client';
 import NewsCard from '@/components/NewsCard';
 import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';

@@ -38,9 +38,17 @@ export async function GET(request: Request) {
     const today = new Date();
     const report = await buildDailyReport(today);
 
+    // Surface totals so an empty result is diagnosable (e.g. 0 sources seeded).
+    const [sourceCount, articleCount] = await Promise.all([
+      prisma.source.count(),
+      prisma.article.count(),
+    ]);
+
     return NextResponse.json({
       success: true,
       data: {
+        sourceCount,
+        articleCount,
         articlesAdded,
         papersAdded,
         eventsCreated,
