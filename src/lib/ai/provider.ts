@@ -1,11 +1,21 @@
 import { generateText as aiGenerateText, generateObject as aiGenerateObject, LanguageModel } from 'ai';
-import { openai } from '@ai-sdk/openai';
-import { google } from '@ai-sdk/google';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { z } from 'zod';
 
+// Accept the common env-var spellings people actually use, not just the exact
+// name each SDK expects by default. A Gemini key set as GEMINI_API_KEY would
+// otherwise be ignored and the app would silently fall back to mock output.
+const geminiKey =
+  process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
+  process.env.GEMINI_API_KEY ||
+  process.env.GOOGLE_API_KEY;
+
+const openaiKey = process.env.OPENAI_API_KEY;
+
 function getProvider(): LanguageModel | null {
-  const hasGemini = !!process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  const hasOpenAI = !!process.env.OPENAI_API_KEY;
+  const hasGemini = !!geminiKey;
+  const hasOpenAI = !!openaiKey;
 
   // Respect an explicit choice, but otherwise auto-detect from whichever key
   // is present. This avoids the common trap where a Gemini key is set but
@@ -15,17 +25,19 @@ function getProvider(): LanguageModel | null {
 
   if (providerName === 'gemini') {
     if (!hasGemini) {
-      console.warn('LLM_PROVIDER=gemini but GOOGLE_GENERATIVE_AI_API_KEY is not set');
+      console.warn('LLM_PROVIDER=gemini but no Gemini API key found (GOOGLE_GENERATIVE_AI_API_KEY / GEMINI_API_KEY / GOOGLE_API_KEY)');
       return null;
     }
+    const google = createGoogleGenerativeAI({ apiKey: geminiKey });
     return google('gemini-2.5-flash');
   }
 
   if (!hasOpenAI) {
-    console.warn('OPENAI_API_KEY not set (and no GOOGLE_GENERATIVE_AI_API_KEY to fall back to)');
+    console.warn('No LLM API key found — set GEMINI_API_KEY (or GOOGLE_GENERATIVE_AI_API_KEY) for Gemini, or OPENAI_API_KEY for OpenAI');
     return null;
   }
 
+  const openai = createOpenAI({ apiKey: openaiKey });
   return openai('gpt-4o-mini');
 }
 
