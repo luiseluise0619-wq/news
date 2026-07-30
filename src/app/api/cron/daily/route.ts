@@ -5,13 +5,19 @@ import { clusterArticles } from '@/lib/pipeline/cluster';
 import { scoreEvents } from '@/lib/pipeline/score';
 import { extractSummaries } from '@/lib/pipeline/extract';
 import { buildDailyReport } from '@/lib/report/builder';
+import { PrismaClient } from '@prisma/client';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
+const prisma = new PrismaClient();
+
 export async function GET(request: Request) {
   try {
     console.log("Starting daily pipeline...");
+
+    // Check if we can reach the DB
+    await prisma.$connect();
 
     console.log("Step 1: Fetching RSS...");
     const articlesAdded = await fetchAllActiveSources();

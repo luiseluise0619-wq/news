@@ -1,10 +1,5 @@
 {
-  "scripts": {
-    "dev": "next dev",
-    "build": "prisma generate && prisma migrate deploy && next build",
-    "start": "next start",
-    "lint": "next lint",
-    "test": "vitest run",
-    "seed": "tsx prisma/seed.ts"
+  "dependencies": {
+    "next": "^15.1.7"
   }
 }
