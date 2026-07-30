@@ -33,15 +33,10 @@ export async function clusterArticles() {
     }))
   });
 
-  // Limit processing for Vercel timeouts
-  let categoriesProcessed = 0;
-
   for (const [categoryName, articles] of Object.entries(articlesByCategory)) {
-    if (categoriesProcessed >= 3) break; // Limit to 3 categories at a time
-
-    // Process in chunks of 10 to avoid context limits and speed up
-    for (let i = 0; i < articles.length && i < 10; i += 10) {
-      const chunk = articles.slice(i, i + 10);
+    // Process in chunks of 15
+    for (let i = 0; i < articles.length; i += 15) {
+      const chunk = articles.slice(i, i + 15);
 
       const articleData = chunk.map(a => ({
         id: a.id,
@@ -85,7 +80,6 @@ Only group articles that describe the SAME event. If an article doesn't match ot
         eventCount++;
       }
     }
-    categoriesProcessed++;
   }
 
   console.log(`Created ${eventCount} new events.`);

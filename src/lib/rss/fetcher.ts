@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 const parser = new Parser({
-  timeout: 5000,
+  timeout: 10000,
   headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
 });
 
@@ -13,8 +13,8 @@ export async function fetchRss(sourceId: string, url: string) {
 
     let addedCount = 0;
 
-    // Only take top 3 items to speed up processing for testing
-    const items = feed.items.slice(0, 3);
+    // 가져올 수 있는 모든 최신 아이템 수집 (최대 30개로 제한하여 서버 메모리 보호)
+    const items = feed.items.slice(0, 30);
 
     for (const item of items) {
       if (!item.link || !item.title) continue;
@@ -59,10 +59,9 @@ export async function fetchAllActiveSources() {
   });
 
   let totalAdded = 0;
-  // Limit to first 5 sources to prevent Vercel Timeout
-  const activeSources = sources.slice(0, 5);
 
-  for (const source of activeSources) {
+  // 모든 소스 가져오기 (제한 해제)
+  for (const source of sources) {
     const added = await fetchRss(source.id, source.url);
     totalAdded += added;
   }

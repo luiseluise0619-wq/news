@@ -7,8 +7,7 @@ const prisma = new PrismaClient();
 export async function scoreEvents() {
   const unscoredEvents = await prisma.newsEvent.findMany({
     where: { importanceScore: 0 },
-    include: { articles: true },
-    take: 10 // Limit for timeouts
+    include: { articles: true }
   });
 
   console.log(`Scoring ${unscoredEvents.length} events...`);

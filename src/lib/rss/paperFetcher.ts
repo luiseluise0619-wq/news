@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 const prisma = new PrismaClient();
 const parser = new Parser({
-  timeout: 5000,
+  timeout: 10000,
   headers: { 'User-Agent': 'Mozilla/5.0' }
 });
 
@@ -17,14 +17,14 @@ export async function fetchPapers() {
   if (sources.length === 0) return 0;
 
   let addedCount = 0;
-  const activeSources = sources.slice(0, 2); // Limit to 2 sources for timeout
 
-  for (const source of activeSources) {
+  // 모든 논문 소스 가져오기 (제한 해제)
+  for (const source of sources) {
     try {
       const feed = await parser.parseURL(source.url);
 
-      // Limit to top 2 recent papers
-      const recentItems = feed.items.slice(0, 2);
+      // 최신 논문 최대 10개
+      const recentItems = feed.items.slice(0, 10);
 
       for (const item of recentItems) {
         if (!item.link || !item.title) continue;

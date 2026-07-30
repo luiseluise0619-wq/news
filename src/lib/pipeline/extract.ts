@@ -7,8 +7,7 @@ const prisma = new PrismaClient();
 export async function extractSummaries() {
   const unsummarizedEvents = await prisma.newsEvent.findMany({
     where: { summaryWhat: "" },
-    include: { articles: true },
-    take: 10 // Limit for timeout
+    include: { articles: true }
   });
 
   console.log(`Summarizing ${unsummarizedEvents.length} events...`);
@@ -32,7 +31,7 @@ export async function extractSummaries() {
       continue;
     }
 
-    const articleContents = event.articles.slice(0, 2).map(a => `Title: ${a.title}\nContent: ${a.content}`).join("\n\n---\n\n");
+    const articleContents = event.articles.slice(0, 5).map(a => `Title: ${a.title}\nContent: ${a.content}`).join("\n\n---\n\n");
 
     const prompt = `Summarize the following news event in Korean based ONLY on the provided articles. Do not invent facts.
 
