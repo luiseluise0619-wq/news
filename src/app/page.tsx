@@ -92,18 +92,50 @@ export default function Home() {
       <Sidebar />
       <main className="flex-1 flex flex-col items-center p-6 md:p-10 overflow-y-auto">
         <div className="w-full max-w-4xl">
-          <header className="mb-10">
-            <h1 className="text-4xl md:text-5xl font-black text-zinc-900 dark:text-zinc-50 tracking-tighter mb-2">
-              DAILY INTELLIGENCE
-            </h1>
-            <p className="text-lg text-zinc-600 dark:text-zinc-400 font-medium h-8">
-              {loading
-                ? '로딩 중...'
-                : reportData
-                  ? new Intl.DateTimeFormat('ko-KR', { dateStyle: 'full' }).format(new Date(reportData.date))
-                  : '오늘의 리포트를 준비 중입니다.'}
-            </p>
+          <header className="mb-10 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+            <div>
+              <h1 className="text-4xl md:text-5xl font-black text-zinc-900 dark:text-zinc-50 tracking-tighter mb-2">
+                DAILY INTELLIGENCE
+              </h1>
+              <p className="text-lg text-zinc-600 dark:text-zinc-400 font-medium h-8">
+                {loading
+                  ? '로딩 중...'
+                  : reportData
+                    ? new Intl.DateTimeFormat('ko-KR', { dateStyle: 'full' }).format(new Date(reportData.date))
+                    : '오늘의 리포트를 준비 중입니다.'}
+              </p>
+            </div>
+
+            {/* Always-visible generate/refresh button so the report can be
+                (re)generated even after one already exists. */}
+            {!loading && (
+              <button
+                onClick={handleGenerateReport}
+                disabled={generating}
+                className="shrink-0 inline-flex items-center px-4 py-2.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                {generating ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    수집·분석 중...
+                  </>
+                ) : reportData ? (
+                  '리포트 새로고침'
+                ) : (
+                  '리포트 생성'
+                )}
+              </button>
+            )}
           </header>
+
+          {error && !loading && (
+            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-md border border-red-200 dark:border-red-800 text-sm break-all">
+              {error}
+            </div>
+          )}
 
           {loading ? (
              <div className="flex justify-center items-center py-20">
@@ -188,12 +220,6 @@ export default function Home() {
           ) : (
             <div className="text-center py-20">
               <p className="text-zinc-500 mb-4">아직 생성된 리포트가 없습니다.</p>
-
-              {error && (
-                <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-md border border-red-200 dark:border-red-800 text-sm break-all">
-                  {error}
-                </div>
-              )}
 
               <button
                 onClick={handleGenerateReport}
