@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { PrismaClient, NewsEvent, Paper } from '@prisma/client';
 import NewsCard from '@/components/NewsCard';
 import Sidebar from '@/components/Sidebar';

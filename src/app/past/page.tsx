@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { PrismaClient } from '@prisma/client';
 import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
