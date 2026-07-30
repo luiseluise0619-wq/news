@@ -50,14 +50,16 @@ export default function Home() {
 
       await fetchReport();
 
-      // The pipeline finishes across background passes; keep polling until
-      // today's report lands (up to ~5 min).
+      // The report is assembled incrementally across background passes; keep
+      // refreshing so new events appear as they're summarized. Stop once
+      // today's overview is finalized (no longer the placeholder), or ~5 min.
       if (data?.data?.continued) {
         const startedAt = Date.now();
         while (Date.now() - startedAt < 300_000) {
-          await new Promise((r) => setTimeout(r, 12_000));
+          await new Promise((r) => setTimeout(r, 6_000));
           const fresh = await fetchReport();
-          if (fresh?.date && isToday(fresh.date)) break;
+          const finalized = fresh?.topChanges && !String(fresh.topChanges).includes('준비하고 있습니다');
+          if (fresh?.date && isToday(fresh.date) && finalized) break;
         }
       }
     } catch (err: any) {

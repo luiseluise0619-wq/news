@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 // pass runs out of budget with work still pending, it hands off to a fresh
 // invocation (see continuation below) so the full report completes across a
 // few short passes instead of dying in one long one.
-const PASS_BUDGET_MS = Number(process.env.PIPELINE_BUDGET_MS) || 45_000;
+const PASS_BUDGET_MS = Number(process.env.PIPELINE_BUDGET_MS) || 30_000;
 // Cap how much of each pass collection may consume, so the AI steps are never
 // starved (e.g. right after a reset when every source is stale and slow).
 const COLLECTION_BUDGET_MS = 15_000;
@@ -150,13 +150,10 @@ export async function GET(request: Request) {
     const moreArticlesToday = pendingArticles > 0 && !capReached;
     const willContinue = (pendingEvents > 0 || staleSources > 0 || moreArticlesToday) && pass < MAX_PASSES;
 
-    // Build the report only once everything is processed, so "TODAY IN 30
-    // SECONDS" and "WHAT MATTERS" are generated from the full, finished set.
-    let reportId: string | null = null;
-    if (!willContinue) {
-      const report = await buildDailyReport(new Date());
-      reportId = report ? report.id : null;
-    }
+    // Assemble the report every pass so it appears fast and fills in as events
+    // are summarized; only regenerate the overview text once we're done.
+    const report = await buildDailyReport(new Date(), !willContinue);
+    const reportId = report ? report.id : null;
 
     if (willContinue) {
       await triggerNextPass(url.origin, pass + 1);
