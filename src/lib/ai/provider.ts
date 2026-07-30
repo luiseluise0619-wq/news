@@ -125,6 +125,7 @@ export async function generateObject<T>(prompt: string, schema: z.Schema<T>, sys
 
     if (prompt.includes('Summarize the following')) {
       return {
+        score: Math.floor(Math.random() * 5) + 5, // 5~9
         what: "테스트 모드: 여러 기사에서 주요 사건이 보고되었습니다.",
         why: "테스트 모드: 이 사건은 향후 산업 및 사회에 여러 영향을 미칠 것으로 분석됩니다.",
         future: "테스트 모드: 추가적인 뉴스 업데이트를 통해 후속 상황을 지켜보아야 합니다."

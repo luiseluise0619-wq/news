@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { fetchAllActiveSources } from '@/lib/rss/fetcher';
 import { fetchPapers } from '@/lib/rss/paperFetcher';
 import { clusterArticles } from '@/lib/pipeline/cluster';
-import { scoreEvents } from '@/lib/pipeline/score';
 import { extractSummaries } from '@/lib/pipeline/extract';
 import { buildDailyReport } from '@/lib/report/builder';
 import { prisma, STALE_SOURCE_MS } from '@/lib/db';
@@ -129,14 +128,14 @@ export async function GET(request: Request) {
     const maxNewEvents = Math.max(0, DAILY_EVENT_CAP - eventsCreatedToday);
 
     const eventsCreated = await clusterArticles(deadline, maxNewEvents);
-    const eventsScored = await scoreEvents(deadline);
+    // Scoring is now folded into summarization (one LLM call per event).
     const eventsSummarized = await extractSummaries(deadline);
 
     // How much work is still outstanding across the whole pipeline.
     const staleBefore = new Date(Date.now() - STALE_SOURCE_MS);
     const [pendingArticles, pendingEvents, staleSources, sourceCount, articleCount] = await Promise.all([
       prisma.article.count({ where: { newsEventId: null } }),
-      prisma.newsEvent.count({ where: { OR: [{ importanceScore: 0 }, { summaryWhat: '' }] } }),
+      prisma.newsEvent.count({ where: { summaryWhat: '' } }),
       prisma.source.count({
         where: { isActive: true, OR: [{ lastFetched: null }, { lastFetched: { lt: staleBefore } }] },
       }),
@@ -176,7 +175,6 @@ export async function GET(request: Request) {
         articlesAdded,
         papersAdded,
         eventsCreated,
-        eventsScored,
         eventsSummarized,
         pendingArticles,
         pendingEvents,

@@ -1,7 +1,6 @@
 import { fetchAllActiveSources } from './src/lib/rss/fetcher';
 import { fetchPapers } from './src/lib/rss/paperFetcher';
 import { clusterArticles } from './src/lib/pipeline/cluster';
-import { scoreEvents } from './src/lib/pipeline/score';
 import { extractSummaries } from './src/lib/pipeline/extract';
 import { buildDailyReport } from './src/lib/report/builder';
 
