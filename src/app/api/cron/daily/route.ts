@@ -15,7 +15,10 @@ export const dynamic = 'force-dynamic';
 // invocation (see continuation below) so the full report completes across a
 // few short passes instead of dying in one long one.
 const PASS_BUDGET_MS = Number(process.env.PIPELINE_BUDGET_MS) || 45_000;
-const MAX_PASSES = 15;
+// Cap how much of each pass collection may consume, so the AI steps are never
+// starved (e.g. right after a reset when every source is stale and slow).
+const COLLECTION_BUDGET_MS = 15_000;
+const MAX_PASSES = 40;
 
 function aiKeyPresent() {
   return !!(
@@ -109,8 +112,11 @@ export async function GET(request: Request) {
       console.log(`Reset cleared ${mockCleared} mock/failed events.`);
     }
 
-    const articlesAdded = await fetchAllActiveSources(deadline);
-    const papersAdded = await fetchPapers(deadline);
+    // Collection gets a bounded slice of the pass so clustering/scoring always
+    // get their share; the rest of the pass belongs to the AI steps.
+    const collectionDeadline = Math.min(deadline, Date.now() + COLLECTION_BUDGET_MS);
+    const articlesAdded = await fetchAllActiveSources(collectionDeadline);
+    const papersAdded = await fetchPapers(collectionDeadline);
     const eventsCreated = await clusterArticles(deadline);
     const eventsScored = await scoreEvents(deadline);
     const eventsSummarized = await extractSummaries(deadline);
