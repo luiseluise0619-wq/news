@@ -25,3 +25,65 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* --- Print / "Save as PDF" ------------------------------------------------
+   Flatten the report into a clean black-on-white document: hide the app
+   chrome (sidebar, buttons), neutralize dark/colored backgrounds, and keep
+   each section from splitting across pages. */
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* Hide interactive chrome and navigation. */
+  .no-print,
+  aside {
+    display: none !important;
+  }
+
+  /* Let the report use the full printable width. */
+  main {
+    display: block !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  #report {
+    max-width: none !important;
+  }
+
+  /* Flatten every card/section to plain black-on-white. */
+  #report,
+  #report * {
+    background: transparent !important;
+    color: #000 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Keep bordered cards readable and unbroken across page breaks. */
+  #report section,
+  #report .rounded-lg,
+  #report .rounded-2xl {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  #report .report-hero,
+  #report .rounded-lg,
+  #report .rounded-2xl {
+    border: 1px solid #ccc !important;
+    border-radius: 8px;
+  }
+
+  a {
+    color: #000 !important;
+    text-decoration: underline;
+  }
+}

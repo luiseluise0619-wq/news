@@ -106,28 +106,37 @@ export default function Home() {
               </p>
             </div>
 
-            {/* Always-visible generate/refresh button so the report can be
-                (re)generated even after one already exists. */}
+            {/* Interactive controls — hidden when printing to PDF. */}
             {!loading && (
-              <button
-                onClick={handleGenerateReport}
-                disabled={generating}
-                className="shrink-0 inline-flex items-center px-4 py-2.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              >
-                {generating ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    수집·분석 중...
-                  </>
-                ) : reportData ? (
-                  '리포트 새로고침'
-                ) : (
-                  '리포트 생성'
+              <div className="no-print flex items-center gap-2 shrink-0">
+                {reportData && (
+                  <button
+                    onClick={() => window.print()}
+                    className="inline-flex items-center px-4 py-2.5 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 font-medium text-sm transition-all"
+                  >
+                    PDF로 저장
+                  </button>
                 )}
-              </button>
+                <button
+                  onClick={handleGenerateReport}
+                  disabled={generating}
+                  className="inline-flex items-center px-4 py-2.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  {generating ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      수집·분석 중...
+                    </>
+                  ) : reportData ? (
+                    '리포트 새로고침'
+                  ) : (
+                    '리포트 생성'
+                  )}
+                </button>
+              </div>
             )}
           </header>
 
@@ -142,8 +151,8 @@ export default function Home() {
                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zinc-900 dark:border-white"></div>
              </div>
           ) : reportData ? (
-            <div className="space-y-12">
-              <section className="bg-zinc-900 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-900 p-8 rounded-2xl shadow-lg">
+            <div id="report" className="space-y-12">
+              <section className="report-hero bg-zinc-900 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-900 p-8 rounded-2xl shadow-lg">
                 <h2 className="text-xl font-bold mb-4 flex items-center">
                   <span className="w-2 h-2 rounded-full bg-red-500 mr-2 animate-pulse"></span>
                   TODAY IN 30 SECONDS
