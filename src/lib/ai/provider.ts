@@ -4,18 +4,25 @@ import { google } from '@ai-sdk/google';
 import { z } from 'zod';
 
 function getProvider(): LanguageModel | null {
-  const providerName = process.env.LLM_PROVIDER || 'openai';
+  const hasGemini = !!process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  const hasOpenAI = !!process.env.OPENAI_API_KEY;
+
+  // Respect an explicit choice, but otherwise auto-detect from whichever key
+  // is present. This avoids the common trap where a Gemini key is set but
+  // LLM_PROVIDER is not, silently falling back to mock ("테스트 모드") output.
+  const providerName =
+    process.env.LLM_PROVIDER || (hasGemini ? 'gemini' : 'openai');
 
   if (providerName === 'gemini') {
-    if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-      console.warn('GOOGLE_GENERATIVE_AI_API_KEY not set');
+    if (!hasGemini) {
+      console.warn('LLM_PROVIDER=gemini but GOOGLE_GENERATIVE_AI_API_KEY is not set');
       return null;
     }
     return google('gemini-2.5-flash');
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    console.warn('OPENAI_API_KEY not set');
+  if (!hasOpenAI) {
+    console.warn('OPENAI_API_KEY not set (and no GOOGLE_GENERATIVE_AI_API_KEY to fall back to)');
     return null;
   }
 
