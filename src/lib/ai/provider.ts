@@ -3,19 +3,20 @@ import { openai } from '@ai-sdk/openai';
 import { google } from '@ai-sdk/google';
 import { z } from 'zod';
 
-function getProvider(): LanguageModel {
+function getProvider(): LanguageModel | null {
   const providerName = process.env.LLM_PROVIDER || 'openai';
 
   if (providerName === 'gemini') {
     if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-      console.warn('GOOGLE_GENERATIVE_AI_API_KEY not set, falling back to openai if available');
-    } else {
-      return google('gemini-2.5-flash');
+      console.warn('GOOGLE_GENERATIVE_AI_API_KEY not set');
+      return null;
     }
+    return google('gemini-2.5-flash');
   }
 
   if (!process.env.OPENAI_API_KEY) {
-    console.warn('OPENAI_API_KEY not set. Will throw error on generation unless mocked.');
+    console.warn('OPENAI_API_KEY not set');
+    return null;
   }
 
   return openai('gpt-4o-mini');
@@ -23,6 +24,11 @@ function getProvider(): LanguageModel {
 
 export async function generateText(prompt: string, system?: string): Promise<string> {
   const model = getProvider();
+
+  if (!model) {
+    console.log("Using MOCK generateText because no API key is provided.");
+    return `[AI API 키가 설정되지 않아 임시 생성된 텍스트입니다.]\n\n이 텍스트는 Vercel 환경변수에 OPENAI_API_KEY 또는 GOOGLE_GENERATIVE_AI_API_KEY가 설정되지 않았을 때 표시됩니다.`;
+  }
 
   try {
     const { text } = await aiGenerateText({
@@ -33,13 +39,61 @@ export async function generateText(prompt: string, system?: string): Promise<str
     return text;
   } catch (error) {
     console.error('Error generating text:', error);
-    // Fallback/dummy response
     return `[Fallback text due to AI error: ${(error as Error).message}]`;
   }
 }
 
 export async function generateObject<T>(prompt: string, schema: z.Schema<T>, system?: string): Promise<T | null> {
   const model = getProvider();
+
+  if (!model) {
+    console.log("Using MOCK generateObject because no API key is provided.");
+    // Determine what to mock based on prompt
+    if (prompt.includes('Group the following')) {
+      // Mock clustering
+      try {
+        const jsonStr = prompt.split('Articles:\n')[1].split('\n\nReturn')[0];
+        const articles = JSON.parse(jsonStr);
+        const clusters = [];
+        // Group every 2 articles
+        for (let i = 0; i < articles.length; i += 2) {
+          clusters.push({
+            theme: `[테스트 뉴스 클러스터] ${articles[i].title}`,
+            articleIds: articles.slice(i, i+2).map((a: any) => a.id)
+          });
+        }
+        return { clusters } as any;
+      } catch (e) {
+        return { clusters: [] } as any;
+      }
+    }
+
+    if (prompt.includes('Evaluate the importance')) {
+      return { score: Math.floor(Math.random() * 5) + 5 } as any; // 5~9
+    }
+
+    if (prompt.includes('Summarize the following')) {
+      return {
+        what: "테스트 모드: 여러 기사에서 주요 사건이 보고되었습니다.",
+        why: "테스트 모드: 이 사건은 향후 산업 및 사회에 여러 영향을 미칠 것으로 분석됩니다.",
+        future: "테스트 모드: 추가적인 뉴스 업데이트를 통해 후속 상황을 지켜보아야 합니다."
+      } as any;
+    }
+
+    if (prompt.includes('Extract paper details')) {
+      return {
+        coreFinding: "테스트 모드: 새로운 방법론이 기존 모델보다 우수함을 증명했습니다.",
+        importance: "테스트 모드: 학계에 새로운 연구 방향을 제시합니다.",
+        limitations: "명시되지 않음",
+        importanceScore: 8,
+        field: "AI/컴퓨터공학",
+        authors: "Test Author et al.",
+        institution: "Test University"
+      } as any;
+    }
+
+    return null;
+  }
 
   try {
     const { object } = await aiGenerateObject({

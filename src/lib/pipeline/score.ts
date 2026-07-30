@@ -7,10 +7,13 @@ const prisma = new PrismaClient();
 export async function scoreEvents() {
   const unscoredEvents = await prisma.newsEvent.findMany({
     where: { importanceScore: 0 },
-    include: { articles: true }
+    include: { articles: true },
+    take: 10 // Limit for timeouts
   });
 
   console.log(`Scoring ${unscoredEvents.length} events...`);
+
+  if (unscoredEvents.length === 0) return 0;
 
   const schema = z.object({
     score: z.number().min(1).max(10).describe("Importance score from 1 to 10")
@@ -19,7 +22,10 @@ export async function scoreEvents() {
   let scoredCount = 0;
 
   for (const event of unscoredEvents) {
-    if (event.articles.length === 0) continue;
+    if (event.articles.length === 0) {
+      await prisma.newsEvent.update({ where: { id: event.id }, data: { importanceScore: 1 } });
+      continue;
+    }
 
     const articleTitles = event.articles.map(a => a.title).join("\n- ");
 
@@ -47,6 +53,9 @@ Consider:
         data: { importanceScore: result.score }
       });
       scoredCount++;
+    } else {
+      // Mock score if AI fails
+      await prisma.newsEvent.update({ where: { id: event.id }, data: { importanceScore: 5 } });
     }
   }
 

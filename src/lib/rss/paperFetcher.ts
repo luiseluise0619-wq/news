@@ -4,7 +4,10 @@ import { generateObject } from '../ai/provider';
 import { z } from 'zod';
 
 const prisma = new PrismaClient();
-const parser = new Parser();
+const parser = new Parser({
+  timeout: 5000,
+  headers: { 'User-Agent': 'Mozilla/5.0' }
+});
 
 export async function fetchPapers() {
   const sources = await prisma.source.findMany({
@@ -14,13 +17,14 @@ export async function fetchPapers() {
   if (sources.length === 0) return 0;
 
   let addedCount = 0;
+  const activeSources = sources.slice(0, 2); // Limit to 2 sources for timeout
 
-  for (const source of sources) {
+  for (const source of activeSources) {
     try {
       const feed = await parser.parseURL(source.url);
 
-      // Limit to top 5 recent papers to save API calls
-      const recentItems = feed.items.slice(0, 5);
+      // Limit to top 2 recent papers
+      const recentItems = feed.items.slice(0, 2);
 
       for (const item of recentItems) {
         if (!item.link || !item.title) continue;
@@ -78,7 +82,7 @@ Return a JSON object with:
         }
       }
     } catch (error) {
-      console.error(`Failed to fetch papers from ${source.url}:`, error);
+      console.error(`Failed to fetch papers from ${source.url}:`, (error as Error).message);
     }
   }
 

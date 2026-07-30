@@ -7,10 +7,13 @@ const prisma = new PrismaClient();
 export async function extractSummaries() {
   const unsummarizedEvents = await prisma.newsEvent.findMany({
     where: { summaryWhat: "" },
-    include: { articles: true }
+    include: { articles: true },
+    take: 10 // Limit for timeout
   });
 
   console.log(`Summarizing ${unsummarizedEvents.length} events...`);
+
+  if (unsummarizedEvents.length === 0) return 0;
 
   const schema = z.object({
     what: z.string().describe("무슨 일이 있었나: 2-3 sentences max"),
@@ -21,9 +24,15 @@ export async function extractSummaries() {
   let summarizedCount = 0;
 
   for (const event of unsummarizedEvents) {
-    if (event.articles.length === 0) continue;
+    if (event.articles.length === 0) {
+      await prisma.newsEvent.update({
+        where: { id: event.id },
+        data: { summaryWhat: "본문 없음", summaryWhy: "-", summaryFuture: "-" }
+      });
+      continue;
+    }
 
-    const articleContents = event.articles.map(a => `Title: ${a.title}\nContent: ${a.content}`).join("\n\n---\n\n");
+    const articleContents = event.articles.slice(0, 2).map(a => `Title: ${a.title}\nContent: ${a.content}`).join("\n\n---\n\n");
 
     const prompt = `Summarize the following news event in Korean based ONLY on the provided articles. Do not invent facts.
 
@@ -50,6 +59,11 @@ Provide the following sections:
         }
       });
       summarizedCount++;
+    } else {
+      await prisma.newsEvent.update({
+        where: { id: event.id },
+        data: { summaryWhat: "요약 생성 실패", summaryWhy: "요약 생성 실패", summaryFuture: "요약 생성 실패" }
+      });
     }
   }
 
