@@ -26,6 +26,9 @@ scheduler.add_job(run_daily_pipeline, 'cron', hour=6, minute=0)
 def start_scheduler():
     scheduler.start()
     print("Scheduler started.")
+    print("Scheduled Jobs:")
+    for job in scheduler.get_jobs():
+        print(f" - {job.name} next run at: {job.next_run_time}")
 
 @app.on_event("shutdown")
 def stop_scheduler():
@@ -35,10 +38,17 @@ def stop_scheduler():
 # --- ROUTES ---
 
 @app.get("/")
-def read_root(request: Request, db: Session = Depends(get_db)):
-    """Homepage showing today's Daily Brief."""
-    today = date.today()
-    brief = db.query(DailyBrief).order_by(DailyBrief.date.desc()).first()
+def read_root(request: Request, date_param: str = Query(None, alias="date"), db: Session = Depends(get_db)):
+    """Homepage showing today's or a specific day's Daily Brief."""
+
+    if date_param:
+        try:
+            target_date = date.fromisoformat(date_param)
+            brief = db.query(DailyBrief).filter(DailyBrief.date == target_date).first()
+        except ValueError:
+            brief = None
+    else:
+        brief = db.query(DailyBrief).order_by(DailyBrief.date.desc()).first()
 
     if not brief:
         return templates.TemplateResponse(request=request, name="index.html", context={"brief": None, "top_3": [], "other_papers": [], "trends": []})
