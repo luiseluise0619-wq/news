@@ -4,11 +4,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@prisma/client', () => {
   const mockPrismaClient = vi.fn();
   mockPrismaClient.prototype.article = {
-    findMany: vi.fn().mockResolvedValue([
-      { id: '1', title: 'Test 1', source: { name: 'BBC', category: { name: 'World' } } },
-      { id: '2', title: 'Test 2', source: { name: 'CNN', category: { name: 'World' } } },
-    ]),
+    // First batch returns the two unclustered articles; subsequent batches are
+    // empty so the clustering loop terminates.
+    findMany: vi.fn()
+      .mockResolvedValueOnce([
+        { id: '1', title: 'Test 1', source: { name: 'BBC', category: { name: 'World' } } },
+        { id: '2', title: 'Test 2', source: { name: 'CNN', category: { name: 'World' } } },
+      ])
+      .mockResolvedValue([]),
     updateMany: vi.fn().mockResolvedValue({ count: 2 }),
+    update: vi.fn().mockResolvedValue({}),
   };
   mockPrismaClient.prototype.category = {
     findUnique: vi.fn().mockResolvedValue({ id: 'cat-1', name: 'World' })

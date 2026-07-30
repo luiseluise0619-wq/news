@@ -1,54 +1,48 @@
-import { PrismaClient, Article } from '@prisma/client';
+import { prisma } from '@/lib/db';
 import { generateObject } from '../ai/provider';
 import { z } from 'zod';
 
-const prisma = new PrismaClient();
+const BATCH_SIZE = 10;
+const defaultDeadline = () => Date.now() + 45_000;
 
-export async function clusterArticles() {
-  const unclusteredArticles = await prisma.article.findMany({
-    where: { newsEventId: null },
-    include: { source: { include: { category: true } } }
-  });
+const schema = z.object({
+  clusters: z.array(z.object({
+    theme: z.string().describe('A short unifying theme/title for this event in Korean'),
+    articleIds: z.array(z.string()).describe('IDs of the articles that belong to this event'),
+  })),
+});
 
-  if (unclusteredArticles.length === 0) {
-    console.log("No unclustered articles found.");
-    return 0;
-  }
-
-  console.log(`Clustering ${unclusteredArticles.length} articles...`);
-
+/**
+ * Group unclustered articles into NewsEvents. Runs in batches until every
+ * article is clustered or the deadline hits. Every article in a processed batch
+ * is guaranteed to leave the queue — any the model doesn't group is given its
+ * own single-article event — so the loop always makes progress.
+ */
+export async function clusterArticles(deadline: number = defaultDeadline()) {
   let eventCount = 0;
 
-  const articlesByCategory = unclusteredArticles.reduce((acc, article) => {
-    const categoryName = article.source.category?.name || 'Uncategorized';
-    if (!acc[categoryName]) acc[categoryName] = [];
-    acc[categoryName].push(article);
-    return acc;
-  }, {} as Record<string, typeof unclusteredArticles>);
+  while (Date.now() < deadline) {
+    const batch = await prisma.article.findMany({
+      where: { newsEventId: null },
+      include: { source: { include: { category: true } } },
+      take: BATCH_SIZE,
+    });
 
-  const schema = z.object({
-    clusters: z.array(z.object({
-      theme: z.string().describe("A short unifying theme/title for this event in Korean"),
-      articleIds: z.array(z.string()).describe("IDs of the articles that belong to this event")
-    }))
-  });
+    if (batch.length === 0) break;
 
-  // Limit processing for Vercel timeouts
-  let categoriesProcessed = 0;
+    // Group this batch by category so the model only compares related articles.
+    const byCategory = batch.reduce((acc, article) => {
+      const categoryName = article.source.category?.name || 'Uncategorized';
+      (acc[categoryName] ||= []).push(article);
+      return acc;
+    }, {} as Record<string, typeof batch>);
 
-  for (const [categoryName, articles] of Object.entries(articlesByCategory)) {
-    if (categoriesProcessed >= 3) break; // Limit to 3 categories at a time
+    const assigned = new Set<string>();
 
-    // Process in chunks of 10 to avoid context limits and speed up
-    for (let i = 0; i < articles.length && i < 10; i += 10) {
-      const chunk = articles.slice(i, i + 10);
+    for (const [categoryName, articles] of Object.entries(byCategory)) {
+      const category = await prisma.category.findUnique({ where: { name: categoryName } });
 
-      const articleData = chunk.map(a => ({
-        id: a.id,
-        title: a.title,
-        source: a.source.name
-      }));
-
+      const articleData = articles.map((a) => ({ id: a.id, title: a.title, source: a.source.name }));
       const prompt = `Group the following news articles into distinct "News Events" if they are talking about the exact same story or event.
 Category: ${categoryName}
 Articles:
@@ -57,35 +51,55 @@ ${JSON.stringify(articleData, null, 2)}
 Return a JSON object with a list of "clusters".
 Only group articles that describe the SAME event. If an article doesn't match others, put it in its own cluster. Theme should be in Korean.`;
 
-      const result = await generateObject(prompt, schema, "You are a helpful assistant that clusters news articles.");
+      const result = await generateObject(prompt, schema, 'You are a helpful assistant that clusters news articles.');
 
-      if (!result || !result.clusters) continue;
+      const validIds = new Set(articles.map((a) => a.id));
 
-      const category = await prisma.category.findUnique({ where: { name: categoryName } });
-
-      for (const cluster of result.clusters) {
-        if (cluster.articleIds.length === 0) continue;
+      for (const cluster of result?.clusters ?? []) {
+        const ids = cluster.articleIds.filter((id) => validIds.has(id) && !assigned.has(id));
+        if (ids.length === 0) continue;
 
         const newsEvent = await prisma.newsEvent.create({
           data: {
             title: cluster.theme,
-            summaryWhat: "",
-            summaryWhy: "",
-            summaryFuture: "",
+            summaryWhat: '',
+            summaryWhy: '',
+            summaryFuture: '',
             importanceScore: 0,
-            categoryId: category?.id
-          }
+            categoryId: category?.id,
+          },
         });
 
         await prisma.article.updateMany({
-          where: { id: { in: cluster.articleIds } },
-          data: { newsEventId: newsEvent.id }
+          where: { id: { in: ids } },
+          data: { newsEventId: newsEvent.id },
         });
 
+        ids.forEach((id) => assigned.add(id));
+        eventCount++;
+      }
+
+      // Drain guarantee: anything the model left out becomes its own event.
+      for (const article of articles) {
+        if (assigned.has(article.id)) continue;
+        const newsEvent = await prisma.newsEvent.create({
+          data: {
+            title: article.title,
+            summaryWhat: '',
+            summaryWhy: '',
+            summaryFuture: '',
+            importanceScore: 0,
+            categoryId: category?.id,
+          },
+        });
+        await prisma.article.update({
+          where: { id: article.id },
+          data: { newsEventId: newsEvent.id },
+        });
+        assigned.add(article.id);
         eventCount++;
       }
     }
-    categoriesProcessed++;
   }
 
   console.log(`Created ${eventCount} new events.`);

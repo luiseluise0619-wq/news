@@ -11,18 +11,26 @@ export default function Home() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isToday = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  };
+
   const fetchReport = async () => {
     try {
       const res = await fetch('/api/reports/latest');
       if (res.ok) {
         const data = await res.json();
         setReportData(data);
+        return data;
       }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
+    return null;
   };
 
   useEffect(() => {
@@ -40,8 +48,18 @@ export default function Home() {
         throw new Error(data.error || '리포트 생성 중 오류가 발생했습니다.');
       }
 
-      // 생성 완료 후 데이터 리로드
       await fetchReport();
+
+      // The pipeline finishes across background passes; keep polling until
+      // today's report lands (up to ~5 min).
+      if (data?.data?.continued) {
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < 300_000) {
+          await new Promise((r) => setTimeout(r, 12_000));
+          const fresh = await fetchReport();
+          if (fresh?.date && isToday(fresh.date)) break;
+        }
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {

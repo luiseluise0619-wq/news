@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/db';
 import { generateText } from '../ai/provider';
-
-const prisma = new PrismaClient();
 
 export async function buildDailyReport(date: Date) {
   const startOfDay = new Date(date);

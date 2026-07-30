@@ -1,42 +1,57 @@
 import Parser from 'rss-parser';
-import { PrismaClient } from '@prisma/client';
+import { prisma, STALE_SOURCE_MS } from '@/lib/db';
 import { generateObject } from '../ai/provider';
 import { z } from 'zod';
 
-const prisma = new PrismaClient();
 const parser = new Parser({
-  timeout: 5000,
+  timeout: 6000,
   headers: { 'User-Agent': 'Mozilla/5.0' }
 });
 
-export async function fetchPapers() {
-  const sources = await prisma.source.findMany({
-    where: { isActive: true, category: { name: '최신 논문/연구' } }
-  });
+const ITEMS_PER_FEED = 2;
+const defaultDeadline = () => Date.now() + 45_000;
 
-  if (sources.length === 0) return 0;
+const schema = z.object({
+  coreFinding: z.string(),
+  importance: z.string(),
+  limitations: z.string().nullable(),
+  importanceScore: z.number().min(1).max(10),
+  field: z.string(),
+  authors: z.string(),
+  institution: z.string().nullable(),
+});
 
+export async function fetchPapers(deadline: number = defaultDeadline()) {
+  const staleBefore = new Date(Date.now() - STALE_SOURCE_MS);
   let addedCount = 0;
-  const activeSources = sources.slice(0, 2); // Limit to 2 sources for timeout
 
-  for (const source of activeSources) {
+  while (Date.now() < deadline) {
+    // Rotate paper sources the same way as news sources so we cover them all.
+    const source = await prisma.source.findFirst({
+      where: {
+        isActive: true,
+        category: { name: '최신 논문/연구' },
+        OR: [{ lastFetched: null }, { lastFetched: { lt: staleBefore } }],
+      },
+      orderBy: { lastFetched: { sort: 'asc', nulls: 'first' } },
+    });
+
+    if (!source) break; // all paper sources fresh — done
+
     try {
       const feed = await parser.parseURL(source.url);
-
-      // Limit to top 2 recent papers
-      const recentItems = feed.items.slice(0, 2);
+      const recentItems = feed.items.slice(0, ITEMS_PER_FEED);
 
       for (const item of recentItems) {
+        if (Date.now() >= deadline) break;
         if (!item.link || !item.title) continue;
 
-        const existingPaper = await prisma.paper.findUnique({
-          where: { url: item.link }
-        });
+        const existingPaper = await prisma.paper.findUnique({ where: { url: item.link } });
+        if (existingPaper) continue;
 
-        if (!existingPaper) {
-          const publishedAt = item.pubDate ? new Date(item.pubDate) : new Date();
+        const publishedAt = item.pubDate ? new Date(item.pubDate) : new Date();
 
-          const prompt = `Extract paper details from the following feed item in Korean:
+        const prompt = `Extract paper details from the following feed item in Korean:
 Title: ${item.title}
 Content: ${item.contentSnippet || item.content}
 
@@ -50,39 +65,33 @@ Return a JSON object with:
 - institution: The institution if mentioned, otherwise null.
 `;
 
-          const schema = z.object({
-            coreFinding: z.string(),
-            importance: z.string(),
-            limitations: z.string().nullable(),
-            importanceScore: z.number().min(1).max(10),
-            field: z.string(),
-            authors: z.string(),
-            institution: z.string().nullable()
+        const result = await generateObject(prompt, schema, 'You are a scientific researcher. Translate content accurately to Korean.');
+
+        if (result) {
+          await prisma.paper.create({
+            data: {
+              title: item.title.trim(),
+              url: item.link,
+              publishedAt,
+              coreFinding: result.coreFinding,
+              importance: result.importance,
+              limitations: result.limitations,
+              importanceScore: result.importanceScore,
+              field: result.field,
+              authors: result.authors,
+              institution: result.institution,
+            },
           });
-
-          const result = await generateObject(prompt, schema, "You are a scientific researcher. Translate content accurately to Korean.");
-
-          if (result) {
-            await prisma.paper.create({
-              data: {
-                title: item.title.trim(),
-                url: item.link,
-                publishedAt,
-                coreFinding: result.coreFinding,
-                importance: result.importance,
-                limitations: result.limitations,
-                importanceScore: result.importanceScore,
-                field: result.field,
-                authors: result.authors,
-                institution: result.institution
-              }
-            });
-            addedCount++;
-          }
+          addedCount++;
         }
       }
     } catch (error) {
       console.error(`Failed to fetch papers from ${source.url}:`, (error as Error).message);
+    } finally {
+      // Mark attempted so rotation advances past this source this cycle.
+      await prisma.source
+        .update({ where: { id: source.id }, data: { lastFetched: new Date() } })
+        .catch(() => {});
     }
   }
 
