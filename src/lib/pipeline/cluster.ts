@@ -18,10 +18,10 @@ const schema = z.object({
  * is guaranteed to leave the queue — any the model doesn't group is given its
  * own single-article event — so the loop always makes progress.
  */
-export async function clusterArticles(deadline: number = defaultDeadline()) {
+export async function clusterArticles(deadline: number = defaultDeadline(), maxNewEvents: number = Infinity) {
   let eventCount = 0;
 
-  while (Date.now() < deadline) {
+  while (Date.now() < deadline && eventCount < maxNewEvents) {
     const batch = await prisma.article.findMany({
       where: { newsEventId: null },
       include: { source: { include: { category: true } } },
@@ -40,6 +40,7 @@ export async function clusterArticles(deadline: number = defaultDeadline()) {
     const assigned = new Set<string>();
 
     for (const [categoryName, articles] of Object.entries(byCategory)) {
+      if (eventCount >= maxNewEvents) break; // daily cap reached — leave the rest queued
       const category = await prisma.category.findUnique({ where: { name: categoryName } });
 
       const articleData = articles.map((a) => ({ id: a.id, title: a.title, source: a.source.name }));
@@ -79,8 +80,10 @@ Only group articles that describe the SAME event. If an article doesn't match ot
         eventCount++;
       }
 
-      // Drain guarantee: anything the model left out becomes its own event.
+      // Drain guarantee: anything the model left out becomes its own event
+      // (unless we've hit the daily cap, in which case it stays queued).
       for (const article of articles) {
+        if (eventCount >= maxNewEvents) break;
         if (assigned.has(article.id)) continue;
         const newsEvent = await prisma.newsEvent.create({
           data: {

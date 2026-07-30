@@ -41,6 +41,39 @@ function getProvider(): LanguageModel | null {
   return openai('gpt-4o-mini');
 }
 
+function isRateLimit(err: unknown): boolean {
+  const e = err as { statusCode?: number; status?: number; message?: string };
+  const status = e?.statusCode ?? e?.status;
+  const msg = String(e?.message ?? err).toLowerCase();
+  return (
+    status === 429 ||
+    msg.includes('rate limit') ||
+    msg.includes('too many requests') ||
+    msg.includes('quota') ||
+    msg.includes('resource has been exhausted')
+  );
+}
+
+/**
+ * Run an LLM call, backing off and retrying on rate-limit (429) errors instead
+ * of failing immediately. Keeps us within the free-tier requests-per-minute
+ * limit rather than burning the daily quota on failed calls. Non-rate-limit
+ * errors are re-thrown for the caller's own fallback handling.
+ */
+async function withRateLimitRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
+  const delays = [2_000, 5_000, 12_000];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (!isRateLimit(err) || attempt >= delays.length) throw err;
+      const wait = delays[attempt];
+      console.warn(`${label}: rate limited — retrying in ${wait}ms (attempt ${attempt + 1}/${delays.length})`);
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+}
+
 export async function generateText(prompt: string, system?: string): Promise<string> {
   const model = getProvider();
 
@@ -50,11 +83,10 @@ export async function generateText(prompt: string, system?: string): Promise<str
   }
 
   try {
-    const { text } = await aiGenerateText({
-      model,
-      prompt,
-      system,
-    });
+    const { text } = await withRateLimitRetry(
+      () => aiGenerateText({ model, prompt, system }),
+      'generateText',
+    );
     return text;
   } catch (error) {
     console.error('Error generating text:', error);
@@ -115,12 +147,10 @@ export async function generateObject<T>(prompt: string, schema: z.Schema<T>, sys
   }
 
   try {
-    const { object } = await aiGenerateObject({
-      model,
-      prompt,
-      system,
-      schema,
-    });
+    const { object } = await withRateLimitRetry(
+      () => aiGenerateObject({ model, prompt, system, schema }),
+      'generateObject',
+    );
     return object;
   } catch (error) {
     console.error('Error generating object:', error);

@@ -19,6 +19,10 @@ const PASS_BUDGET_MS = Number(process.env.PIPELINE_BUDGET_MS) || 45_000;
 // starved (e.g. right after a reset when every source is stale and slow).
 const COLLECTION_BUDGET_MS = 15_000;
 const MAX_PASSES = 40;
+// Max NewsEvents to create (and therefore score+summarize) per calendar day, to
+// stay within the Gemini free-tier daily request quota. Leftover articles wait
+// for the next day. Override with DAILY_EVENT_CAP (e.g. raise it on a paid tier).
+const DAILY_EVENT_CAP = Number(process.env.DAILY_EVENT_CAP) || 50;
 
 function aiKeyPresent() {
   return !!(
@@ -117,7 +121,14 @@ export async function GET(request: Request) {
     const collectionDeadline = Math.min(deadline, Date.now() + COLLECTION_BUDGET_MS);
     const articlesAdded = await fetchAllActiveSources(collectionDeadline);
     const papersAdded = await fetchPapers(collectionDeadline);
-    const eventsCreated = await clusterArticles(deadline);
+
+    // Enforce the daily event cap cumulatively across all of today's passes.
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const eventsCreatedToday = await prisma.newsEvent.count({ where: { createdAt: { gte: startOfToday } } });
+    const maxNewEvents = Math.max(0, DAILY_EVENT_CAP - eventsCreatedToday);
+
+    const eventsCreated = await clusterArticles(deadline, maxNewEvents);
     const eventsScored = await scoreEvents(deadline);
     const eventsSummarized = await extractSummaries(deadline);
 
@@ -133,8 +144,12 @@ export async function GET(request: Request) {
       prisma.article.count(),
     ]);
 
-    const remaining = pendingArticles + pendingEvents + staleSources;
-    const willContinue = remaining > 0 && pass < MAX_PASSES;
+    // Once today's cap is hit, stop chewing through the article backlog — those
+    // wait for tomorrow. Still continue to finish scoring/summarizing whatever
+    // events already exist, and to finish collecting.
+    const capReached = eventsCreatedToday + eventsCreated >= DAILY_EVENT_CAP;
+    const moreArticlesToday = pendingArticles > 0 && !capReached;
+    const willContinue = (pendingEvents > 0 || staleSources > 0 || moreArticlesToday) && pass < MAX_PASSES;
 
     // Build the report only once everything is processed, so "TODAY IN 30
     // SECONDS" and "WHAT MATTERS" are generated from the full, finished set.
@@ -154,6 +169,8 @@ export async function GET(request: Request) {
         pass,
         aiConfigured: aiKeyPresent(),
         mockCleared,
+        dailyEventCap: DAILY_EVENT_CAP,
+        eventsCreatedToday: eventsCreatedToday + eventsCreated,
         sourceCount,
         articleCount,
         articlesAdded,
