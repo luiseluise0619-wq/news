@@ -11,12 +11,6 @@ export default function Home() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isToday = (dateStr: string) => {
-    const d = new Date(dateStr);
-    const now = new Date();
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-  };
-
   const fetchReport = async () => {
     try {
       const res = await fetch('/api/reports/latest');
@@ -40,32 +34,32 @@ export default function Home() {
   const handleGenerateReport = async () => {
     setGenerating(true);
     setError(null);
+
+    let data: any;
     try {
       const res = await fetch('/api/cron/daily');
-      const data = await res.json();
-
+      data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || '리포트 생성 중 오류가 발생했습니다.');
       }
-
+      // Pass 0 already produced a complete (possibly partial) report.
       await fetchReport();
-
-      // The report is assembled incrementally across background passes; keep
-      // refreshing so new events appear as they're summarized. Stop once
-      // today's overview is finalized (no longer the placeholder), or ~5 min.
-      if (data?.data?.continued) {
-        const startedAt = Date.now();
-        while (Date.now() - startedAt < 300_000) {
-          await new Promise((r) => setTimeout(r, 6_000));
-          const fresh = await fetchReport();
-          const finalized = fresh?.topChanges && !String(fresh.topChanges).includes('준비하고 있습니다');
-          if (fresh?.date && isToday(fresh.date) && finalized) break;
-        }
-      }
     } catch (err: any) {
       setError(err.message);
-    } finally {
       setGenerating(false);
+      return;
+    }
+
+    // Report is on screen — stop the spinner. Any remaining events fill in
+    // quietly via background refreshes.
+    setGenerating(false);
+
+    if (data?.data?.continued) {
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < 120_000) {
+        await new Promise((r) => setTimeout(r, 8_000));
+        await fetchReport();
+      }
     }
   };
 

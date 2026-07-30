@@ -21,7 +21,7 @@ const MAX_PASSES = 40;
 // Max NewsEvents to create (and therefore score+summarize) per calendar day, to
 // stay within the Gemini free-tier daily request quota. Leftover articles wait
 // for the next day. Override with DAILY_EVENT_CAP (e.g. raise it on a paid tier).
-const DAILY_EVENT_CAP = Number(process.env.DAILY_EVENT_CAP) || 50;
+const DAILY_EVENT_CAP = Number(process.env.DAILY_EVENT_CAP) || 15;
 
 function aiKeyPresent() {
   return !!(
@@ -151,8 +151,10 @@ export async function GET(request: Request) {
     const willContinue = (pendingEvents > 0 || staleSources > 0 || moreArticlesToday) && pass < MAX_PASSES;
 
     // Assemble the report every pass so it appears fast and fills in as events
-    // are summarized; only regenerate the overview text once we're done.
-    const report = await buildDailyReport(new Date(), !willContinue);
+    // are summarized. Finalize the overview on pass 0 too (not just the last
+    // pass), so the very first request yields a complete report even if the
+    // background continuation chain never runs — no "stuck summarizing" state.
+    const report = await buildDailyReport(new Date(), pass === 0 || !willContinue);
     const reportId = report ? report.id : null;
 
     if (willContinue) {
