@@ -9,7 +9,25 @@ export default function Home() {
   const [reportData, setReportData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [emailing, setEmailing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleSendEmail = async () => {
+    setEmailing(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/reports/email');
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || '이메일 발송에 실패했습니다.');
+      }
+      alert('이메일을 보냈습니다.');
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setEmailing(false);
+    }
+  };
 
   const fetchReport = async () => {
     try {
@@ -114,6 +132,15 @@ export default function Home() {
                     className="inline-flex items-center px-4 py-2.5 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 font-medium text-sm transition-all"
                   >
                     PDF로 저장
+                  </button>
+                )}
+                {reportData && (
+                  <button
+                    onClick={handleSendEmail}
+                    disabled={emailing}
+                    className="inline-flex items-center px-4 py-2.5 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    {emailing ? '보내는 중…' : '메일로 보내기'}
                   </button>
                 )}
                 <button

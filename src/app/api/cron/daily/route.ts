@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { fetchAllActiveSources } from '@/lib/rss/fetcher';
 import { fetchPapers } from '@/lib/rss/paperFetcher';
 import { generateFastReport } from '@/lib/pipeline/fastReport';
+import { buildReportHtml, sendReportEmail } from '@/lib/email/report';
 import { prisma } from '@/lib/db';
 
 export const maxDuration = 300;
@@ -77,6 +78,27 @@ export async function GET(request: Request) {
     // 2) Build the whole report in a single LLM call.
     const { report, eventsCreated } = await generateFastReport();
 
+    // 3) Optionally email it (used by the daily cron: ?email=1). No-op unless
+    // the email env vars are configured.
+    let emailed: boolean | undefined;
+    if (url.searchParams.get('email') === '1' && report) {
+      const full = await prisma.dailyReport.findUnique({
+        where: { id: report.id },
+        include: {
+          newsEvents: { include: { articles: true, category: true }, orderBy: { importanceScore: 'desc' } },
+          papers: true,
+        },
+      });
+      if (full) {
+        const dateStr = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(new Date(full.date));
+        const result = await sendReportEmail(buildReportHtml(full), `[Daily Intelligence] ${dateStr}`);
+        emailed = result.sent;
+        if (!result.sent && result.reason !== 'not_configured') {
+          console.error('Report email failed:', result.reason);
+        }
+      }
+    }
+
     const [sourceCount, articleCount, pendingArticles] = await Promise.all([
       prisma.source.count(),
       prisma.article.count(),
@@ -94,6 +116,7 @@ export async function GET(request: Request) {
         papersAdded,
         eventsCreated,
         pendingArticles,
+        emailed,
         reportId: report ? report.id : null,
       },
     });
