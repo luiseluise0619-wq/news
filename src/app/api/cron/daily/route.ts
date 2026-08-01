@@ -76,7 +76,7 @@ export async function GET(request: Request) {
     const papersAdded = await fetchPapers(collectionDeadline);
 
     // 2) Build the whole report in a single LLM call.
-    const { report, eventsCreated } = await generateFastReport();
+    const { report, eventsCreated, llmFailed } = await generateFastReport();
 
     // 3) Optionally email it (used by the daily cron: ?email=1). No-op unless
     // the email env vars are configured.
@@ -115,6 +115,7 @@ export async function GET(request: Request) {
         articlesAdded,
         papersAdded,
         eventsCreated,
+        llmFailed,
         pendingArticles,
         emailed,
         reportId: report ? report.id : null,

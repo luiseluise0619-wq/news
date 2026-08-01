@@ -1,31 +1,45 @@
 import { prisma } from '@/lib/db';
-import { generateObject } from '../ai/provider';
+import { generateObject, generateText } from '../ai/provider';
 import { CATEGORY_NAMES } from '../data/sources';
 import { z } from 'zod';
 
 // One LLM call turns the freshly collected headlines into the entire report
 // (clustering + scoring + summaries + overview), instead of one call per event.
 // This keeps generation fast and well within the free-tier quota.
-const MAX_INPUT_ARTICLES = 40;
+const MAX_INPUT_ARTICLES = 25;
 const MAX_EVENTS = 15;
+
+const eventSchema = z.object({
+  title: z.string(),
+  category: z.string(),
+  what: z.string(),
+  why: z.string(),
+  future: z.string(),
+  importance: z.number().min(1).max(10),
+  articleIds: z.array(z.string()),
+});
 
 const schema = z.object({
   topChanges: z.string().describe('오늘 꼭 알아야 할 핵심 5가지, 한국어 불릿'),
   whatMatters: z.string().describe('가장 중요한 3가지를 왜 중요한지 한국어로 심층 설명'),
-  events: z
-    .array(
-      z.object({
-        title: z.string(),
-        category: z.string(),
-        what: z.string(),
-        why: z.string(),
-        future: z.string(),
-        importance: z.number().min(1).max(10),
-        articleIds: z.array(z.string()),
-      }),
-    )
-    .describe(`중요도 높은 순 최대 ${MAX_EVENTS}개의 이벤트`),
+  events: z.array(eventSchema).describe(`중요도 높은 순 최대 ${MAX_EVENTS}개의 이벤트`),
 });
+
+type ReportResult = z.infer<typeof schema>;
+
+/** Best-effort JSON extraction from a plain-text LLM response. */
+function parseLenient(raw: string): ReportResult | null {
+  try {
+    const cleaned = raw.replace(/```json/gi, '').replace(/```/g, '');
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start < 0 || end < 0) return null;
+    const parsed = schema.safeParse(JSON.parse(cleaned.slice(start, end + 1)));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function generateFastReport() {
   const startOfDay = new Date();
@@ -40,19 +54,24 @@ export async function generateFastReport() {
 
   let report = await prisma.dailyReport.findUnique({ where: { date: startOfDay } });
 
-  if (articles.length === 0) {
+  const ensureReport = async () => {
     if (!report) {
       report = await prisma.dailyReport.create({
-        data: { date: startOfDay, topChanges: '오늘 수집된 새 뉴스가 없습니다.', whatMatters: '-' },
+        data: { date: startOfDay, topChanges: '생성 중…', whatMatters: '생성 중…' },
       });
     }
-    return { report, eventsCreated: 0 };
+    return report;
+  };
+
+  if (articles.length === 0) {
+    await ensureReport();
+    return { report: report!, eventsCreated: 0, llmFailed: false };
   }
 
   const articleData = articles.map((a) => ({
     id: a.id,
     title: a.title,
-    snippet: (a.content || '').slice(0, 300),
+    snippet: (a.content || '').slice(0, 250),
     category: a.source.category?.name || '기타',
     source: a.source.name,
   }));
@@ -60,7 +79,7 @@ export async function generateFastReport() {
   const prompt = `당신은 한국어 뉴스 브리핑 편집자입니다. 아래 오늘 수집된 기사들로 "데일리 인텔리전스" 리포트를 작성하세요.
 
 기사 목록(JSON):
-${JSON.stringify(articleData, null, 2)}
+${JSON.stringify(articleData)}
 
 규칙:
 1. 같은 사건을 다루는 기사는 하나의 event로 묶으세요.
@@ -71,16 +90,28 @@ ${JSON.stringify(articleData, null, 2)}
 
 모든 텍스트는 한국어. 기사에 없는 사실은 지어내지 마세요.`;
 
-  const result = await generateObject(prompt, schema, '당신은 정확하고 간결한 뉴스 편집자입니다.');
+  const system = '당신은 정확하고 간결한 뉴스 편집자입니다.';
 
-  if (!report) {
-    report = await prisma.dailyReport.create({
-      data: { date: startOfDay, topChanges: '생성 중…', whatMatters: '생성 중…' },
-    });
+  // Primary: structured output. Fallback: plain text JSON parsed leniently —
+  // structured output can fail on large nested schemas.
+  let result = await generateObject(prompt, schema, system);
+  if (!result) {
+    const raw = await generateText(`${prompt}\n\n반드시 유효한 JSON 객체 하나만 출력하세요.`, system);
+    result = parseLenient(raw);
   }
 
+  await ensureReport();
+
   if (!result || !result.events || result.events.length === 0) {
-    return { report, eventsCreated: 0 };
+    // Make the failure visible instead of leaving a stale "생성 중…".
+    await prisma.dailyReport.update({
+      where: { id: report!.id },
+      data: {
+        topChanges: '요약 생성에 실패했습니다. 잠시 후 다시 시도해주세요.',
+        whatMatters: '-',
+      },
+    });
+    return { report: report!, eventsCreated: 0, llmFailed: true };
   }
 
   const categories = await prisma.category.findMany();
@@ -99,7 +130,7 @@ ${JSON.stringify(articleData, null, 2)}
         summaryFuture: ev.future,
         importanceScore: Math.min(10, Math.max(1, Math.round(ev.importance) || 5)),
         categoryId: catByName[ev.category] ?? null,
-        dailyReportId: report.id,
+        dailyReportId: report!.id,
       },
     });
 
@@ -110,10 +141,10 @@ ${JSON.stringify(articleData, null, 2)}
   }
 
   await prisma.dailyReport.update({
-    where: { id: report.id },
+    where: { id: report!.id },
     data: { topChanges: result.topChanges, whatMatters: result.whatMatters },
   });
 
   console.log(`Fast report: created ${eventsCreated} events from ${articles.length} articles.`);
-  return { report, eventsCreated };
+  return { report: report!, eventsCreated, llmFailed: false };
 }
